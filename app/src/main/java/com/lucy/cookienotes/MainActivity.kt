@@ -91,7 +91,7 @@ class MainActivity : Activity() {
         search = EditText(this).apply {
             hint = "Cari username atau catatan..."
             setHintTextColor(muted); setTextColor(white); textSize = 14f
-            singleLine = true; setPadding(dp(14), 0, dp(14), 0)
+            setSingleLine(true); setPadding(dp(14), 0, dp(14), 0)
             background = rounded(panel2, 14)
             addTextChangedListener(SimpleWatcher { renderAccounts() })
         }
