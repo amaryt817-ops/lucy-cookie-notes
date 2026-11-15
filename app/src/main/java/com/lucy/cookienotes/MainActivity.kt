@@ -75,7 +75,10 @@ class MainActivity : Activity() {
         heading.addView(text("Cookie Notes", 27f, white, true))
         heading.addView(text("Simpan dan kelompokkan akun Roblox", 12f, muted))
         header.addView(heading)
-        header.addView(button("+ Akun", { showAccountDialog(null) }, true))
+        val headerBtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        headerBtns.addView(button("Impor", { showImportDialog() }), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+        headerBtns.addView(button("+ Akun", { showAccountDialog(null) }, true))
+        header.addView(headerBtns)
         root.addView(header)
         val stats = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
@@ -84,6 +87,7 @@ class MainActivity : Activity() {
         count = text("${accounts.size} akun tersimpan", 13f, white, true)
         stats.addView(count)
         stats.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        stats.addView(button("Ekspor", { showExportDialog() }), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
         stats.addView(button("Kelola label", { showLabelDialog() }))
         val statLp = LinearLayout.LayoutParams(-1, -2); statLp.topMargin = dp(18)
         root.addView(stats, statLp)
@@ -243,6 +247,68 @@ class MainActivity : Activity() {
                 }
                 dialog.show()
             }
+    }
+
+    private fun showImportDialog() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0) }
+        box.addView(text("Satu akun per baris, format:", 12f, muted))
+        box.addView(text("username,cookie,label", 12f, purple, true).apply { setPadding(0, dp(2), 0, 0) })
+        val input = EditText(this).apply {
+            hint = "contoh:\nuser1,cookieA,Farming\nuser2,cookieB,Farming"
+            setHintTextColor(muted); setTextColor(white); textSize = 13f
+            setPadding(dp(12), dp(10), dp(12), dp(10)); background = rounded(panel2, 12)
+            gravity = Gravity.TOP
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        val inputLp = LinearLayout.LayoutParams(-1, dp(220)); inputLp.topMargin = dp(12)
+        box.addView(input, inputLp)
+        AlertDialog.Builder(this).setTitle("Impor banyak akun")
+            .setView(box).setNegativeButton("Batal", null)
+            .setPositiveButton("Impor", null).create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(-1).setOnClickListener {
+                        val lines = input.text.toString().split("\n").map { it.trim() }.filter { it.isNotBlank() }
+                        var added = 0
+                        lines.forEachIndexed { i, line ->
+                            val parts = line.split(",").map { it.trim() }
+                            val u = parts.getOrNull(0).orEmpty()
+                            val c = parts.getOrNull(1).orEmpty()
+                            if (u.isNotBlank() && c.isNotBlank()) {
+                                val l = parts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: labels.firstOrNull() ?: "Lainnya"
+                                if (!labels.contains(l)) labels.add(l)
+                                accounts.add(Account(System.currentTimeMillis() + i, u, c, l, ""))
+                                added++
+                            }
+                        }
+                        if (added == 0) {
+                            Toast.makeText(this, "Tidak ada baris valid. Format: username,cookie,label", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        saveVault(); dialog.dismiss()
+                        refreshLabels()
+                        Toast.makeText(this, "$added akun ditambahkan.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                dialog.show()
+            }
+    }
+
+    private fun showExportDialog() {
+        if (accounts.isEmpty()) { Toast.makeText(this, "Belum ada akun untuk diekspor.", Toast.LENGTH_SHORT).show(); return }
+        val source = accounts.filter { selectedLabel == "Semua" || it.label == selectedLabel }
+        if (source.isEmpty()) { Toast.makeText(this, "Tidak ada akun di label ini.", Toast.LENGTH_SHORT).show(); return }
+        val options = arrayOf("Username saja", "Cookie saja", "Username:Cookie", "Username,Cookie,Label (untuk impor ulang)")
+        AlertDialog.Builder(this).setTitle("Ekspor label: $selectedLabel (${source.size} akun)").setItems(options) { _, which ->
+            val text = when (which) {
+                0 -> source.joinToString("\n") { it.username }
+                1 -> source.joinToString("\n") { it.cookie }
+                2 -> source.joinToString("\n") { "${it.username}:${it.cookie}" }
+                else -> source.joinToString("\n") { "${it.username},${it.cookie},${it.label}" }
+            }
+            val clip = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clip.setPrimaryClip(ClipData.newPlainText("Lucy export", text))
+            Toast.makeText(this, "${source.size} akun disalin ke clipboard. Jangan bagikan ke siapa pun.", Toast.LENGTH_LONG).show()
+        }.show()
     }
 
     private fun showMoveDialog(a: Account) {
