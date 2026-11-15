@@ -251,11 +251,11 @@ class MainActivity : Activity() {
 
     private fun showImportDialog() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0) }
-        box.addView(text("Satu akun per baris, format:", 12f, muted))
-        box.addView(text("username,cookie,label", 12f, purple, true).apply { setPadding(0, dp(2), 0, 0) })
+        box.addView(text("Satu akun per baris. Bagian sebelum titik dua pertama dibaca sebagai username:", 12f, muted))
+        box.addView(text("username:cookie", 12f, purple, true).apply { setPadding(0, dp(2), 0, 0) })
         val input = EditText(this).apply {
-            hint = "contoh:\nuser1,cookieA,Farming\nuser2,cookieB,Farming"
-            setHintTextColor(muted); setTextColor(white); textSize = 13f
+            hint = "user1:cookie_akun_1\nuser2:cookie_akun_2\nuser3:cookie_akun_3"
+            setHintTextColor(muted); setTextColor(white); textSize = 12f
             setPadding(dp(12), dp(10), dp(12), dp(10)); background = rounded(panel2, 12)
             gravity = Gravity.TOP
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -266,27 +266,37 @@ class MainActivity : Activity() {
             .setView(box).setNegativeButton("Batal", null)
             .setPositiveButton("Impor", null).create().also { dialog ->
                 dialog.setOnShowListener {
-                    dialog.getButton(-1).setOnClickListener {
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         val lines = input.text.toString().split("\n").map { it.trim() }.filter { it.isNotBlank() }
+                        val defaultLabel = labels.firstOrNull() ?: "Lainnya"
                         var added = 0
+                        var failed = 0
                         lines.forEachIndexed { i, line ->
-                            val parts = line.split(",").map { it.trim() }
-                            val u = parts.getOrNull(0).orEmpty()
-                            val c = parts.getOrNull(1).orEmpty()
+                            // Format lama hasil ekspor: username,cookie,label
+                            val commaParts = line.split(",").map { it.trim() }
+                            // Format baru: username:cookie (split hanya pada titik dua pertama; cookie boleh mengandung ":")
+                            val colonParts = line.split(":", limit = 2).map { it.trim() }
+                            val (u, c, l) = when {
+                                commaParts.size >= 2 && commaParts[0].isNotBlank() && commaParts[1].isNotBlank() ->
+                                    Triple(commaParts[0], commaParts[1], commaParts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: defaultLabel)
+                                colonParts.size == 2 && colonParts[0].isNotBlank() && colonParts[1].isNotBlank() ->
+                                    Triple(colonParts[0], colonParts[1], defaultLabel)
+                                else -> Triple("", "", "")
+                            }
                             if (u.isNotBlank() && c.isNotBlank()) {
-                                val l = parts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: labels.firstOrNull() ?: "Lainnya"
                                 if (!labels.contains(l)) labels.add(l)
                                 accounts.add(Account(System.currentTimeMillis() + i, u, c, l, ""))
                                 added++
-                            }
+                            } else failed++
                         }
                         if (added == 0) {
-                            Toast.makeText(this, "Tidak ada baris valid. Format: username,cookie,label", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this, "Tidak ada baris valid. Format: username:cookie", Toast.LENGTH_LONG).show()
                             return@setOnClickListener
                         }
                         saveVault(); dialog.dismiss()
                         refreshLabels()
-                        Toast.makeText(this, "$added akun ditambahkan.", Toast.LENGTH_SHORT).show()
+                        val msg = "$added akun ditambahkan" + if (failed > 0) ", $failed baris dilewati (format salah)." else "."
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                     }
                 }
                 dialog.show()
