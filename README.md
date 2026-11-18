@@ -8,10 +8,11 @@ Project Android native (Kotlin) untuk mencatat akun dan cookie Roblox secara lok
 - Cari username/catatan, filter berdasarkan label.
 - Cookie disamarkan secara default, dapat ditampilkan sementara.
 - Tombol salin cookie.
-- Impor banyak akun sekaligus: tempel beberapa baris `username:cookie` (titik dua pertama memisahkan username dari cookie; tidak perlu isi label manual). Baris lama berformat `username,cookie,label` (misalnya dari hasil ekspor) tetap dikenali untuk pemulihan cadangan.
-- Ekspor/format akun pada label aktif: username saja, cookie saja, `username:cookie`, atau `username,cookie,label` untuk dicadangkan/diimpor ulang.
+- Impor banyak akun sekaligus: tempel beberapa baris `username:cookie` (titik dua pertama memisahkan username dari cookie), lalu pilih label yang sudah ada atau ketik nama label baru untuk seluruh akun yang diimpor.
+- Ekspor dan hapus massal: centang akun mana saja (boleh lintas semua akun pada label aktif, atau "Pilih semua"), lalu pilih **Ekspor** (format: username saja, cookie saja, `username:cookie`, atau `username,cookie,label` untuk cadangan) atau **Hapus** untuk menghapus akun yang dicentang sekaligus.
 - Penyimpanan terenkripsi AES-256-GCM menggunakan Android Keystore.
 - Tidak meminta izin internet dan tidak mengirim data ke server.
+- Setiap build APK ditandatangani dengan kunci debug yang sama (`app/debug.keystore`, ikut tersimpan di repo ini), supaya APK versi baru bisa dipasang menimpa versi lama tanpa perlu uninstall dan tanpa kehilangan data vault.
 
 ## Membuat APK
 1. Ekstrak ZIP ini.

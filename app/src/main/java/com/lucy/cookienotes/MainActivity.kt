@@ -87,7 +87,7 @@ class MainActivity : Activity() {
         count = text("${accounts.size} akun tersimpan", 13f, white, true)
         stats.addView(count)
         stats.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        stats.addView(button("Ekspor", { showExportDialog() }), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+        stats.addView(button("Ekspor/Hapus", { showExportDialog() }), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
         stats.addView(button("Kelola label", { showLabelDialog() }))
         val statLp = LinearLayout.LayoutParams(-1, -2); statLp.topMargin = dp(18)
         root.addView(stats, statLp)
@@ -260,32 +260,62 @@ class MainActivity : Activity() {
             gravity = Gravity.TOP
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
-        val inputLp = LinearLayout.LayoutParams(-1, dp(220)); inputLp.topMargin = dp(12)
+        val inputLp = LinearLayout.LayoutParams(-1, dp(170)); inputLp.topMargin = dp(12)
         box.addView(input, inputLp)
+
+        box.addView(text("Label untuk akun yang diimpor:", 12f, muted).apply { setPadding(0, dp(14), 0, dp(4)) })
+        var chosenLabel = labels.firstOrNull() ?: "Lainnya"
+        val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val chipScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chipRow) }
+        box.addView(chipScroll, LinearLayout.LayoutParams(-1, dp(42)))
+        val newLabelInput = EditText(this).apply {
+            hint = "Atau ketik nama label baru di sini"
+            setHintTextColor(muted); setTextColor(white); textSize = 13f
+            setSingleLine(true); setPadding(dp(12), 0, dp(12), 0); background = rounded(panel2, 12)
+        }
+        box.addView(newLabelInput, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+
+        fun renderChips() {
+            chipRow.removeAllViews()
+            labels.forEach { l ->
+                val chip = text(l, 12f, if (chosenLabel == l) bg else white, true).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(dp(14), dp(8), dp(14), dp(8))
+                    background = rounded(if (chosenLabel == l) purple else panel2, 18)
+                    setOnClickListener { chosenLabel = l; newLabelInput.setText(""); renderChips() }
+                }
+                chipRow.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+            }
+        }
+        renderChips()
+
         AlertDialog.Builder(this).setTitle("Impor banyak akun")
             .setView(box).setNegativeButton("Batal", null)
             .setPositiveButton("Impor", null).create().also { dialog ->
                 dialog.setOnShowListener {
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         val lines = input.text.toString().split("\n").map { it.trim() }.filter { it.isNotBlank() }
-                        val defaultLabel = labels.firstOrNull() ?: "Lainnya"
+                        if (lines.isEmpty()) {
+                            Toast.makeText(this, "Tempel minimal satu baris.", Toast.LENGTH_SHORT).show(); return@setOnClickListener
+                        }
+                        val targetLabel = newLabelInput.text.toString().trim().ifBlank { chosenLabel }
+                        if (targetLabel.isBlank()) {
+                            Toast.makeText(this, "Pilih atau buat label dulu.", Toast.LENGTH_SHORT).show(); return@setOnClickListener
+                        }
                         var added = 0
                         var failed = 0
                         lines.forEachIndexed { i, line ->
-                            // Format lama hasil ekspor: username,cookie,label
+                            // Format lama hasil ekspor: username,cookie,label — label-nya diabaikan, dipindah ke label pilihan di atas.
                             val commaParts = line.split(",").map { it.trim() }
                             // Format baru: username:cookie (split hanya pada titik dua pertama; cookie boleh mengandung ":")
                             val colonParts = line.split(":", limit = 2).map { it.trim() }
-                            val (u, c, l) = when {
-                                commaParts.size >= 2 && commaParts[0].isNotBlank() && commaParts[1].isNotBlank() ->
-                                    Triple(commaParts[0], commaParts[1], commaParts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: defaultLabel)
-                                colonParts.size == 2 && colonParts[0].isNotBlank() && colonParts[1].isNotBlank() ->
-                                    Triple(colonParts[0], colonParts[1], defaultLabel)
-                                else -> Triple("", "", "")
+                            val (u, c) = when {
+                                commaParts.size >= 2 && commaParts[0].isNotBlank() && commaParts[1].isNotBlank() -> commaParts[0] to commaParts[1]
+                                colonParts.size == 2 && colonParts[0].isNotBlank() && colonParts[1].isNotBlank() -> colonParts[0] to colonParts[1]
+                                else -> "" to ""
                             }
                             if (u.isNotBlank() && c.isNotBlank()) {
-                                if (!labels.contains(l)) labels.add(l)
-                                accounts.add(Account(System.currentTimeMillis() + i, u, c, l, ""))
+                                accounts.add(Account(System.currentTimeMillis() + i, u, c, targetLabel, ""))
                                 added++
                             } else failed++
                         }
@@ -293,9 +323,10 @@ class MainActivity : Activity() {
                             Toast.makeText(this, "Tidak ada baris valid. Format: username:cookie", Toast.LENGTH_LONG).show()
                             return@setOnClickListener
                         }
+                        if (!labels.contains(targetLabel)) labels.add(targetLabel)
                         saveVault(); dialog.dismiss()
                         refreshLabels()
-                        val msg = "$added akun ditambahkan" + if (failed > 0) ", $failed baris dilewati (format salah)." else "."
+                        val msg = "$added akun ditambahkan ke label '$targetLabel'" + if (failed > 0) ", $failed baris dilewati (format salah)." else "."
                         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                     }
                 }
@@ -304,20 +335,77 @@ class MainActivity : Activity() {
     }
 
     private fun showExportDialog() {
-        if (accounts.isEmpty()) { Toast.makeText(this, "Belum ada akun untuk diekspor.", Toast.LENGTH_SHORT).show(); return }
+        if (accounts.isEmpty()) { Toast.makeText(this, "Belum ada akun.", Toast.LENGTH_SHORT).show(); return }
         val source = accounts.filter { selectedLabel == "Semua" || it.label == selectedLabel }
         if (source.isEmpty()) { Toast.makeText(this, "Tidak ada akun di label ini.", Toast.LENGTH_SHORT).show(); return }
+        val checked = mutableSetOf<Long>()
+        val checkBoxes = mutableListOf<CheckBox>()
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0) }
+        box.addView(text("Centang akun yang mau diekspor atau dihapus (label: $selectedLabel):", 12f, muted))
+        val selectAllBtn = button("Pilih semua", {})
+        val itemsScroll = ScrollView(this)
+        val itemsCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        itemsScroll.addView(itemsCol)
+        source.forEach { acc ->
+            val cb = CheckBox(this).apply {
+                text = "${acc.username}  •  ${acc.label}"
+                setTextColor(white)
+                setOnCheckedChangeListener { _, isChecked -> if (isChecked) checked.add(acc.id) else checked.remove(acc.id) }
+            }
+            checkBoxes.add(cb)
+            itemsCol.addView(cb, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        }
+        selectAllBtn.setOnClickListener {
+            val allChecked = checkBoxes.all { it.isChecked }
+            checkBoxes.forEach { it.isChecked = !allChecked }
+        }
+        box.addView(selectAllBtn, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10); bottomMargin = dp(8) })
+        box.addView(itemsScroll, LinearLayout.LayoutParams(-1, dp(220)))
+
+        AlertDialog.Builder(this).setTitle("Pilih akun (${source.size})")
+            .setView(box)
+            .setNegativeButton("Batal", null)
+            .setNeutralButton("Hapus", null)
+            .setPositiveButton("Ekspor", null)
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val selected = source.filter { checked.contains(it.id) }
+                        if (selected.isEmpty()) { Toast.makeText(this, "Centang minimal satu akun.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                        dialog.dismiss()
+                        showExportFormatDialog(selected)
+                    }
+                    dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        val selected = source.filter { checked.contains(it.id) }
+                        if (selected.isEmpty()) { Toast.makeText(this, "Centang minimal satu akun.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                        AlertDialog.Builder(this).setTitle("Hapus ${selected.size} akun?")
+                            .setMessage("Akun yang dihapus tidak bisa dikembalikan.")
+                            .setNegativeButton("Batal", null)
+                            .setPositiveButton("Hapus") { _, _ ->
+                                val ids = selected.map { it.id }.toSet()
+                                accounts.removeAll { ids.contains(it.id) }
+                                revealIds.removeAll(ids)
+                                saveVault(); dialog.dismiss(); renderAccounts()
+                                Toast.makeText(this, "${selected.size} akun dihapus.", Toast.LENGTH_SHORT).show()
+                            }.show()
+                    }
+                }
+                dialog.show()
+            }
+    }
+
+    private fun showExportFormatDialog(selected: List<Account>) {
         val options = arrayOf("Username saja", "Cookie saja", "Username:Cookie", "Username,Cookie,Label (untuk impor ulang)")
-        AlertDialog.Builder(this).setTitle("Ekspor label: $selectedLabel (${source.size} akun)").setItems(options) { _, which ->
+        AlertDialog.Builder(this).setTitle("Ekspor ${selected.size} akun").setItems(options) { _, which ->
             val text = when (which) {
-                0 -> source.joinToString("\n") { it.username }
-                1 -> source.joinToString("\n") { it.cookie }
-                2 -> source.joinToString("\n") { "${it.username}:${it.cookie}" }
-                else -> source.joinToString("\n") { "${it.username},${it.cookie},${it.label}" }
+                0 -> selected.joinToString("\n") { it.username }
+                1 -> selected.joinToString("\n") { it.cookie }
+                2 -> selected.joinToString("\n") { "${it.username}:${it.cookie}" }
+                else -> selected.joinToString("\n") { "${it.username},${it.cookie},${it.label}" }
             }
             val clip = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
             clip.setPrimaryClip(ClipData.newPlainText("Lucy export", text))
-            Toast.makeText(this, "${source.size} akun disalin ke clipboard. Jangan bagikan ke siapa pun.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "${selected.size} akun disalin ke clipboard. Jangan bagikan ke siapa pun.", Toast.LENGTH_LONG).show()
         }.show()
     }
 

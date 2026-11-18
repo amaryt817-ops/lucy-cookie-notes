@@ -9,8 +9,23 @@ android {
         applicationId = "com.lucy.cookienotes"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
+        versionCode = (System.getenv("APP_VERSION_CODE") ?: "1").toInt()
         versionName = "1.0"
+    }
+    signingConfigs {
+        getByName("debug") {
+            // Keystore tetap, bukan dibuat ulang tiap build, supaya sertifikat tanda tangan sama
+            // setiap rilis dan APK baru bisa menimpa yang lama tanpa perlu uninstall / hilang data.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
